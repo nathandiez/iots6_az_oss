@@ -4,12 +4,12 @@
   hosts: iot_servers
   vars:
     timescaledb_container_name: timescaledb
-    postgres_db: your_db_name
-    postgres_user: your_db_user
-    postgres_password: your_db_password
+    postgres_db: iotdb
+    postgres_user: iotuser
+    postgres_password: iotpass
     postgres_port: 5432
-    timescale_data_dir: /home/{{ ansible_user | default('your_ansible_user') }}/timescaledb_data
-    schema_dir: /home/{{ ansible_user | default('your_ansible_user') }}/timescaledb_schema
+    timescale_data_dir: /home/{{ ansible_user | default('nathan') }}/timescaledb_data
+    schema_dir: /home/{{ ansible_user | default('nathan') }}/timescaledb_schema
 
   tasks:
     - name: Create directories
@@ -47,12 +47,9 @@
           SELECT create_hypertable('sensor_data', 'time', if_not_exists => TRUE);
           CREATE INDEX IF NOT EXISTS idx_sensor_data_device_id ON sensor_data(device_id);
           CREATE INDEX IF NOT EXISTS idx_sensor_data_event_type ON sensor_data(event_type);
-          CREATE INDEX IF NOT EXISTS idx_sensor_data_wifi_rssi ON sensor_data(wifi_rssi);
-          CREATE INDEX IF NOT EXISTS idx_sensor_data_uptime_seconds ON sensor_data(uptime_seconds);
-          CREATE INDEX IF NOT EXISTS idx_sensor_data_fan_pwm ON sensor_data(fan_pwm);
-          GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO your_db_user;
-          GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO your_db_user;
-          GRANT ALL PRIVILEGES ON SCHEMA public TO your_db_user;
+          GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO iotuser;
+          GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO iotuser;
+          GRANT ALL PRIVILEGES ON SCHEMA public TO iotuser;
         mode: '0644'
       become: yes
 
@@ -92,33 +89,11 @@
       changed_when: false
       become: yes
 
-    - name: Check if sensor_data table exists and get current schema
-      ansible.builtin.shell: >
-        PGPASSWORD={{ postgres_password }} psql -h localhost -U {{ postgres_user }} -d {{ postgres_db }} -c "
-        SELECT column_name FROM information_schema.columns 
-        WHERE table_name = 'sensor_data' AND table_schema = 'public';" 2>/dev/null || echo "table_not_found"
-      register: current_schema
-      changed_when: false
-      become: yes
-
-    - name: Update existing schema with new columns if needed
-      ansible.builtin.shell: >
-        PGPASSWORD={{ postgres_password }} psql -h localhost -U {{ postgres_user }} -d {{ postgres_db }} -c "
-        ALTER TABLE sensor_data ADD COLUMN IF NOT EXISTS wifi_rssi INTEGER;
-        ALTER TABLE sensor_data ADD COLUMN IF NOT EXISTS uptime_seconds INTEGER;
-        ALTER TABLE sensor_data ADD COLUMN IF NOT EXISTS fan_pwm INTEGER;
-        ALTER TABLE sensor_data ADD COLUMN IF NOT EXISTS fans_active_level INTEGER;
-        CREATE INDEX IF NOT EXISTS idx_sensor_data_wifi_rssi ON sensor_data(wifi_rssi);
-        CREATE INDEX IF NOT EXISTS idx_sensor_data_uptime_seconds ON sensor_data(uptime_seconds);
-        CREATE INDEX IF NOT EXISTS idx_sensor_data_fan_pwm ON sensor_data(fan_pwm);"
-      when: current_schema.stdout != "table_not_found" and "'wifi_rssi' not in current_schema.stdout"
-      become: yes
-
     - name: Verify TimescaleDB setup
       ansible.builtin.shell: >
         PGPASSWORD={{ postgres_password }} psql -h localhost -U {{ postgres_user }} -d {{ postgres_db }} -c "
         SELECT hypertable_name FROM timescaledb_information.hypertables WHERE hypertable_name = 'sensor_data';
-        SELECT indexname FROM pg_indexes WHERE tablename = 'sensor_data' AND indexname IN ('idx_sensor_data_device_id', 'idx_sensor_data_event_type', 'idx_sensor_data_wifi_rssi');"
+        SELECT indexname FROM pg_indexes WHERE tablename = 'sensor_data' AND indexname IN ('idx_sensor_data_device_id', 'idx_sensor_data_event_type');"
       register: verification
       failed_when: verification.rc != 0 or 'sensor_data' not in verification.stdout
       become: yes
@@ -126,14 +101,3 @@
     - name: Display verification results
       ansible.builtin.debug:
         msg: "TimescaleDB successfully deployed and configured. Table and indexes verified."
-
-    - name: Show current table schema
-      ansible.builtin.shell: >
-        PGPASSWORD={{ postgres_password }} psql -h localhost -U {{ postgres_user }} -d {{ postgres_db }} -c "\d sensor_data"
-      register: final_schema
-      changed_when: false
-      become: yes
-
-    - name: Display final table schema
-      ansible.builtin.debug:
-        msg: "{{ final_schema.stdout_lines }}"
