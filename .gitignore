@@ -1,0 +1,59 @@
+# Terraform
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+*.tfvars
+terraform.tfvars*
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+
+# Ansible
+*.retry
+.ansible/
+
+# Environment & Secrets
+set-proxmox-env.sh
+.env
+.env.local
+*.pem
+*.key
+id_rsa*
+*.crt
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+.venv/
+venv/
+env/
+
+# Logs
+*.log
+logs/
+
+# OS & Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Vagrant
+.vagrant/
+
+# Backup files
+*.backup
+*.bak
+
+hosts
