@@ -1,55 +1,53 @@
-# IoT Infrastructure Deployment
+# IoTs6 Azure Open Source Stack
 
-Automated deployment system for IoT infrastructure using Terraform, Ansible, and Docker.
+A complete IoT monitoring platform that combines Azure cloud infrastructure with open-source technologies. This project shows how to build a production IoT system using cost-effective open-source tools on Azure VMs.
 
-## What This Does
+## Architecture
 
-- **Deploys a VM** in Proxmox using Terraform
-- **Sets up IoT services** with Ansible:
-  - TimescaleDB (time-series database)
-  - Mosquitto MQTT broker
-  - IoT data processing service
-- **Manages everything with Docker** containers
+**Infrastructure:** Azure VM provisioned with Terraform  
+**Message Broker:** Mosquitto MQTT  
+**Database:** TimescaleDB for time-series data  
+**Visualization:** Grafana dashboards  
+**Data Processing:** Python MQTT consumer  
+**Deployment:** Ansible with Docker containers  
+
+## What It Does
+
+Collects sensor data from Raspberry Pi Pico W devices and processes it through a complete IoT stack:
+
+1. Sensors publish temperature/humidity data via MQTT
+2. Mosquitto broker handles message routing  
+3. Python service processes and stores sensor data
+4. TimescaleDB stores time-series data
+5. Grafana provides real-time monitoring
 
 ## Quick Start
 
-1. **Configure your credentials:**
-   ```bash
-   # Edit set-proxmox-env.sh with your Proxmox API token
-   # Edit ansible/playbooks/timescaledb.yml with your database credentials
-   ```
+```bash
+# Deploy everything
+./deploy.sh
 
-2. **Deploy:**
-   ```bash
-   ./deploy.sh
-   ```
+# Monitor logs
+./taillogs.sh
 
-3. **Destroy when done:**
-   ```bash
-   ./destroy.sh
-   ```
-
-## What You Get
-
-- **MQTT Broker** on port 1883
-- **TimescaleDB** on port 5432
-- **Automated sensor data processing**
-- **Real-time data ingestion** from IoT devices
+# Clean up
+./destroy.sh
+```
 
 ## Requirements
 
-- Proxmox server with API access
-- Ansible installed locally
-- Terraform installed locally
+- Azure subscription
+- Terraform and Ansible installed
+- SSH key at `~/.ssh/[your_key_name]`
 
-## Project Structure
+## Access
 
-```
-├── terraform/          # Infrastructure as code
-├── ansible/             # Configuration management
-├── services/            # Docker services
-├── deploy.sh           # One-command deployment
-└── destroy.sh          # Clean teardown
-```
+After deployment:
+- Grafana Dashboard: `http://[VM_IP]:3000` (admin/admin)
+- MQTT Broker: `mqtt://[VM_IP]:1883` 
+- Database: `postgresql://[db_user]:[db_password]@[VM_IP]:5432/[db_name]`
 
-Perfect for IoT projects that need scalable data collection and storage.
+## Related Projects
+
+- [picosensor_net] - MicroPython sensor firmware
+- [prox_serveconfig] - Device configuration server

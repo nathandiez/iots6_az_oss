@@ -12,3 +12,6 @@
 
 - name: Include IoT Service setup
   import_playbook: iot_service.yml
+
+- name: Include Grafana dashboard setup
+  import_playbook: grafana.yml
