@@ -1,33 +1,31 @@
+# terraform/vm-module/outputs.tf for IoTs6
+
 output "vm_id" {
   description = "ID of the created VM"
-  value       = proxmox_virtual_environment_vm.vm.id
+  value       = azurerm_linux_virtual_machine.main.id
 }
 
 output "vm_name" {
   description = "Name of the VM"
-  value       = proxmox_virtual_environment_vm.vm.name
+  value       = azurerm_linux_virtual_machine.main.name
 }
 
-output "mac_address" {
-  description = "MAC address of VM network interface"
-  value       = proxmox_virtual_environment_vm.vm.network_device[0].mac_address
+output "public_ip" {
+  description = "Public IP address of the VM"
+  value       = azurerm_public_ip.main.ip_address
 }
 
-output "ipv4_addresses" {
-  description = "IPv4 addresses assigned to the VM"
-  value       = proxmox_virtual_environment_vm.vm.ipv4_addresses
+output "private_ip" {
+  description = "Private IP address of the VM"
+  value       = azurerm_network_interface.main.private_ip_address
 }
 
-output "primary_ip" {
-  description = "Primary IP address of the VM (first non-loopback)"
-  value       = try(
-    proxmox_virtual_environment_vm.vm.ipv4_addresses != null ? 
-      (length(proxmox_virtual_environment_vm.vm.ipv4_addresses) > 0 ? 
-        (length(proxmox_virtual_environment_vm.vm.ipv4_addresses[0]) > 0 ? 
-          proxmox_virtual_environment_vm.vm.ipv4_addresses[0][0] : 
-          "No IP assigned yet") : 
-        "No IP assigned yet") : 
-      "No IP assigned yet", 
-    "No IP assigned yet"
-  )
+output "fqdn" {
+  description = "Fully qualified domain name"
+  value       = azurerm_public_ip.main.fqdn
+}
+
+output "ssh_connection" {
+  description = "SSH connection string"
+  value       = "${var.admin_username}@${azurerm_public_ip.main.ip_address}"
 }

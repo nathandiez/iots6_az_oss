@@ -1,8 +1,10 @@
+# main.tf for Azure IoTS6 deployment
+
 terraform {
   required_providers {
-    proxmox = {
-      source  = "bpg/proxmox"
-      version = "~> 0.76"
+    azurerm = {
+      source  = "hashicorp/azurerm"
+      version = "~> 3.0"
     }
   }
 }
@@ -14,24 +16,132 @@ variable "enable_local-exec" {
   default     = false
 }
 
-provider "proxmox" {
-  endpoint = "https://192.168.5.6:8006"
-  insecure = true
+# Azure provider configuration
+provider "azurerm" {
+  features {}
 }
 
-module "nedv1-iots6_server" {
+# Resource group
+resource "azurerm_resource_group" "main" {
+  name     = "rg-aziots6"
+  location = "East US"
+}
+
+# Virtual network
+resource "azurerm_virtual_network" "main" {
+  name                = "vnet-aziots6"
+  address_space       = ["10.0.0.0/16"]
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
+}
+
+# Subnet
+resource "azurerm_subnet" "internal" {
+  name                 = "subnet-internal"
+  resource_group_name  = azurerm_resource_group.main.name
+  virtual_network_name = azurerm_virtual_network.main.name
+  address_prefixes     = ["10.0.2.0/24"]
+}
+
+# Network Security Group and rules for IoT services
+resource "azurerm_network_security_group" "main" {
+  name                = "nsg-aziots6"
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
+
+  security_rule {
+    name                       = "SSH"
+    priority                   = 1001
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = "22"
+    source_address_prefix      = "*"
+    destination_address_prefix = "*"
+  }
+
+  security_rule {
+    name                       = "MQTT"
+    priority                   = 1002
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = "1883"
+    source_address_prefix      = "*"
+    destination_address_prefix = "*"
+  }
+
+  security_rule {
+    name                       = "PostgreSQL"
+    priority                   = 1003
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = "5432"
+    source_address_prefix      = "*"
+    destination_address_prefix = "*"
+  }
+
+  # Optional: Add HTTP port if you plan to add web frontend
+  security_rule {
+    name                       = "HTTP"
+    priority                   = 1004
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = "80"
+    source_address_prefix      = "*"
+    destination_address_prefix = "*"
+  }
+
+  security_rule {
+    name                       = "HTTPS"
+    priority                   = 1005
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = "443"
+    source_address_prefix      = "*"
+    destination_address_prefix = "*"
+  }
+  # Add this security rule to your main.tf file in the azurerm_network_security_group "main" resource
+
+  security_rule {
+    name                       = "Grafana"
+    priority                   = 1006
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = "3000"
+    source_address_prefix      = "*"
+    destination_address_prefix = "*"
+  }
+}
+
+# Call the VM module
+module "aziots6-vm" {
   source = "./vm-module"
   
-  vm_name     = "nedv1-iots6"
-  mac_address = "52:54:00:12:23:22"
-  cores       = 4
-  memory      = 4096
-  disk_size   = 40
+  vm_name             = "aziots6"
+  resource_group_name = azurerm_resource_group.main.name
+  location            = azurerm_resource_group.main.location
+  subnet_id           = azurerm_subnet.internal.id
+  network_security_group_id = azurerm_network_security_group.main.id
+  
+  # Larger VM for IoT services (TimescaleDB, MQTT, etc.)
+  vm_size = "Standard_B2s"  # 2 vCPU, 4GB RAM
+  disk_size_gb = 40
 }
 
-# Wait for VM to get IP and be accessible
+# Wait for VM to be ready
 resource "time_sleep" "wait_for_vm" {
-  depends_on = [module.nedv1-iots6_server]
+  depends_on = [module.aziots6-vm]
   create_duration = "60s"
 }
 
@@ -44,7 +154,7 @@ resource "null_resource" "run_ansible" {
   ]
 
   triggers = {
-    vm_id = module.nedv1-iots6_server.vm_id
+    vm_id = module.aziots6-vm.vm_id
   }
 
   # Wait for SSH and update inventory
@@ -63,55 +173,38 @@ resource "null_resource" "run_ansible" {
   }
 }
 
-# Outputs - find the real IP from the arrays
-locals {
-  all_ips = try(module.nedv1-iots6_server.ipv4_addresses, [])
-  
-  valid_ip = try(
-    flatten([
-      for ip_array in local.all_ips : [
-        for ip in ip_array : ip
-        if ip != "127.0.0.1" && ip != "172.17.0.1" && ip != "" && ip != null
-      ]
-    ])[0],
-    null
-  )
+# Outputs
+output "vm_id" {
+  value = module.aziots6-vm.vm_id
+  description = "Azure VM ID"
 }
 
 output "server_ip" {
-  value = local.valid_ip != null ? local.valid_ip : "Not yet available - VM may still be starting"
+  value = module.aziots6-vm.public_ip
   description = "Server IP address"
 }
 
-output "vm_id" {
-  value = module.nedv1-iots6_server.vm_id
-  description = "Proxmox VM ID"
-}
-
 output "vm_ip" {
-  value = local.valid_ip != null ? local.valid_ip : "Not yet available - VM may still be starting"
+  value = module.aziots6-vm.public_ip
   description = "VM IP address"
 }
 
+output "vm_private_ip" {
+  value = module.aziots6-vm.private_ip
+  description = "VM private IP address"
+}
 
 output "vm_name" {
-  value = module.nedv1-iots6_server.vm_name
+  value = module.aziots6-vm.vm_name
+  description = "VM name"
 }
 
-output "mac_address" {
-  value = module.nedv1-iots6_server.mac_address
-}
-
-# Service URLs (will be available after deployment)
+# Service URLs for IoT stack
 output "service_urls" {
-  value = local.valid_ip != null ? {
-    timescaledb = "postgresql://iotuser:iotpass@${local.valid_ip}:5432/iotdb"
-    mosquitto   = "mqtt://${local.valid_ip}:1883"
-    ssh_access  = "nathan@${local.valid_ip}"
-  } : {
-    timescaledb = "Not yet available - VM may still be starting"
-    mosquitto   = "Not yet available - VM may still be starting"
-    ssh_access  = "Not yet available - VM may still be starting"
+  value = {
+    timescaledb = "postgresql://iotuser:iotpass@${module.aziots6-vm.public_ip}:5432/iotdb"
+    mosquitto   = "mqtt://${module.aziots6-vm.public_ip}:1883"
+    ssh_access  = "nathan@${module.aziots6-vm.public_ip}"
   }
   description = "IoT service connection URLs"
 }

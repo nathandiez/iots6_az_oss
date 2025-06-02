@@ -1,34 +1,21 @@
 #!/usr/bin/env bash
-# wait-for-ssh.sh - Wait for VM to be accessible via SSH and update Ansible inventory
+# wait-for-ssh.sh - Wait for Azure VM to be accessible via SSH and update Ansible inventory
 set -e
 
 echo "Waiting for SSH to become available..."
 max_attempts=30
 attempt=0
 
-# Function to get IP with multiple methods
+# Ensure we're in the terraform directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+TERRAFORM_DIR="$(dirname "$SCRIPT_DIR")"
+cd "$TERRAFORM_DIR"
+
+# Function to get IP from terraform output
 get_ip() {
-  # Method 1: Extract from terraform state directly
-  local ip=$(terraform show -json 2>/dev/null | jq -r '.values.root_module.child_modules[].resources[] | select(.type=="proxmox_virtual_environment_vm") | .values.ipv4_addresses[0][0]' 2>/dev/null || echo "")
+  local ip=$(terraform output -raw vm_ip 2>/dev/null || echo "")
   
-  # Check if it's valid
-  if [ -n "$ip" ] && [ "$ip" != "null" ] && [ "$ip" != "127.0.0.1" ]; then
-    echo "$ip"
-    return 0
-  fi
-  
-  # Method 2: Extract from terraform show text output
-  ip=$(terraform show 2>/dev/null | grep -A 5 "ipv4_addresses" | grep -o -E '([0-9]{1,3}\.){3}[0-9]{1,3}' | grep -v '127.0.0.1' | head -n 1)
-  
-  if [ -n "$ip" ]; then
-    echo "$ip"
-    return 0
-  fi
-  
-  # Method 3: Try DNS resolution as fallback
-  ip=$(ping -c 1 nedv1-iots6.local 2>/dev/null | head -n 1 | grep -o -E '([0-9]{1,3}\.){3}[0-9]{1,3}' || echo "")
-  
-  if [ -n "$ip" ]; then
+  if [ -n "$ip" ] && [ "$ip" != "null" ]; then
     echo "$ip"
     return 0
   fi
@@ -38,7 +25,7 @@ get_ip() {
 }
 
 # Get IP address with retries
-for i in {1..3}; do
+for i in {1..5}; do
   IP=$(get_ip)
   if [ -n "$IP" ]; then
     break
@@ -57,26 +44,29 @@ fi
 if [ -z "$IP" ]; then
   echo "Error: Still could not retrieve a valid IP address"
   echo "Debug info:"
-  terraform show | grep -A 10 -B 5 ipv4_addresses || echo "No IP addresses found in state"
+  terraform output || echo "No outputs available"
   exit 1
 fi
 
 echo "Using IP: $IP"
 
+# Update Ansible inventory with correct IP
 # Create hosts file directory if it doesn't exist
 mkdir -p ../ansible/inventory
 echo "Updating Ansible inventory with IP: $IP"
 cat > ../ansible/inventory/hosts << EOF
 [iot_servers]
-nedv1-iots6 ansible_host=$IP
+aziots6 ansible_host=$IP
 
 [all:vars]
 ansible_python_interpreter=/usr/bin/python3
+ansible_user=nathan
+ansible_ssh_private_key_file=~/.ssh/id_rsa_azure
 EOF
 
 # Now wait for SSH
 while [ $attempt -lt $max_attempts ]; do
-  if ssh -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=5 nathan@"$IP" echo ready 2>/dev/null; then
+  if ssh -i ~/.ssh/id_rsa_azure -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=5 nathan@"$IP" echo ready 2>/dev/null; then
     echo "SSH is available!"
     break
   fi

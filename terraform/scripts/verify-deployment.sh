@@ -1,33 +1,20 @@
 #!/usr/bin/env bash
-# verify-deployment.sh - Verify the deployment is working
+# verify-deployment.sh - Verify the Azure IoTS6 deployment is working
 set -e
 
-echo "Verifying deployment..."
+echo "Verifying IoT deployment..."
 sleep 5
 
-# Use same IP detection method as SSH provisioner
+# Ensure we're in the terraform directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+TERRAFORM_DIR="$(dirname "$SCRIPT_DIR")"
+cd "$TERRAFORM_DIR"
+
+# Get IP from terraform output
 get_ip() {
-  # Method 1: Extract from terraform state directly
-  local ip=$(terraform show -json 2>/dev/null | jq -r '.values.root_module.child_modules[].resources[] | select(.type=="proxmox_virtual_environment_vm") | .values.ipv4_addresses[0][0]' 2>/dev/null || echo "")
+  local ip=$(terraform output -raw vm_ip 2>/dev/null || echo "")
   
-  # Check if it's valid
-  if [ -n "$ip" ] && [ "$ip" != "null" ] && [ "$ip" != "127.0.0.1" ]; then
-    echo "$ip"
-    return 0
-  fi
-  
-  # Method 2: Extract from terraform show text output
-  ip=$(terraform show 2>/dev/null | grep -A 5 "ipv4_addresses" | grep -o -E '([0-9]{1,3}\.){3}[0-9]{1,3}' | grep -v '127.0.0.1' | head -n 1)
-  
-  if [ -n "$ip" ]; then
-    echo "$ip"
-    return 0
-  fi
-  
-  # Method 3: Try DNS resolution as fallback
-  ip=$(ping -c 1 nedv1-iots6.local 2>/dev/null | head -n 1 | grep -o -E '([0-9]{1,3}\.){3}[0-9]{1,3}' || echo "")
-  
-  if [ -n "$ip" ]; then
+  if [ -n "$ip" ] && [ "$ip" != "null" ] && [ "$ip" != "" ]; then
     echo "$ip"
     return 0
   fi
@@ -38,7 +25,14 @@ get_ip() {
 
 IP=$(get_ip)
 
-if [ -n "$IP" ] && [ "$IP" != "127.0.0.1" ]; then
+if [ -z "$IP" ]; then
+  echo "❌ Could not determine IP from terraform state"
+  echo "Debug: Trying terraform refresh..."
+  terraform refresh > /dev/null 2>&1
+  IP=$(get_ip)
+fi
+
+if [ -n "$IP" ]; then
   echo "Testing IoT services at $IP..."
   
   # Test TimescaleDB port
@@ -47,7 +41,7 @@ if [ -n "$IP" ] && [ "$IP" != "127.0.0.1" ]; then
     echo "✅ TimescaleDB port 5432 is accessible"
     
     # Test actual database connection
-    if ssh -o StrictHostKeyChecking=no -o BatchMode=yes nathan@"$IP" "PGPASSWORD=iotpass psql -h localhost -U iotuser -d iotdb -c 'SELECT 1;'" >/dev/null 2>&1; then
+    if ssh -i ~/.ssh/id_rsa_azure -o StrictHostKeyChecking=no -o BatchMode=yes nathan@"$IP" "PGPASSWORD=iotpass psql -h localhost -U iotuser -d iotdb -c 'SELECT 1;'" >/dev/null 2>&1; then
       echo "✅ TimescaleDB database connection successful"
     else
       echo "⚠️  TimescaleDB port is open but database may still be initializing"
@@ -67,7 +61,7 @@ if [ -n "$IP" ] && [ "$IP" != "127.0.0.1" ]; then
   # Check Docker containers
   echo "Checking Docker container status..."
   echo "---"
-  if ssh -o StrictHostKeyChecking=no -o BatchMode=yes nathan@"$IP" "docker ps --format 'table {{.Names}}\t{{.Status}}'" 2>/dev/null; then
+  if ssh -i ~/.ssh/id_rsa_azure -o StrictHostKeyChecking=no -o BatchMode=yes nathan@"$IP" "docker ps --format 'table {{.Names}}\t{{.Status}}'" 2>/dev/null; then
     echo "---"
     echo "✅ Container status check successful"
   else
@@ -76,7 +70,7 @@ if [ -n "$IP" ] && [ "$IP" != "127.0.0.1" ]; then
   
   # Test Docker network
   echo "Checking Docker network..."
-  if ssh -o StrictHostKeyChecking=no -o BatchMode=yes nathan@"$IP" "docker network ls | grep -q iot_network" 2>/dev/null; then
+  if ssh -i ~/.ssh/id_rsa_azure -o StrictHostKeyChecking=no -o BatchMode=yes nathan@"$IP" "docker network ls | grep -q iot_network" 2>/dev/null; then
     echo "✅ Docker iot_network exists"
   else
     echo "❌ Docker iot_network not found"
@@ -90,7 +84,24 @@ if [ -n "$IP" ] && [ "$IP" != "127.0.0.1" ]; then
   echo "   • SSH Access: nathan@$IP"
   echo "✅ Server IP: $IP"
   
+  # Test Grafana dashboard
+  echo "Testing Grafana dashboard connectivity..."
+  if nc -z -w5 "$IP" 3000 2>/dev/null; then
+    echo "✅ Grafana port 3000 is accessible"
+    
+    # Test Grafana HTTP endpoint
+    if curl -s "http://$IP:3000/api/health" | grep -q "ok" 2>/dev/null; then
+      echo "✅ Grafana is responding to HTTP requests"
+    else
+      echo "⚠️  Grafana port is open but service may still be starting"
+    fi
+  else
+    echo "❌ Grafana port 3000 is not accessible"
+  fi
+
 else
   echo "❌ Could not determine valid IP for verification"
+  echo "Available terraform outputs:"
+  terraform output 2>/dev/null || echo "No outputs available"
   exit 1
 fi

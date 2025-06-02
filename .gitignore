@@ -17,7 +17,7 @@ terraform.rc
 .ansible/
 
 # Environment & Secrets
-set-proxmox-env.sh
+set-azure-env.sh
 .env
 .env.local
 *.pem
