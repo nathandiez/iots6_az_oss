@@ -46,7 +46,7 @@ SELECT
         ELSE NULL 
     END AS pressure,
     motion,
-    temp_sensor_type AS sensor_type
+    sensor_type
 FROM sensor_data 
 WHERE temperature IS NOT NULL 
    OR humidity IS NOT NULL 

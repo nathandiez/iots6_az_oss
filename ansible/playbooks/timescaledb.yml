@@ -42,11 +42,13 @@
               wifi_rssi INTEGER,
               uptime_seconds INTEGER,
               fan_pwm INTEGER,
-              fans_active_level INTEGER
+              fans_active_level INTEGER,
+              sensor_type TEXT
           );
           SELECT create_hypertable('sensor_data', 'time', if_not_exists => TRUE);
           CREATE INDEX IF NOT EXISTS idx_sensor_data_device_id ON sensor_data(device_id);
           CREATE INDEX IF NOT EXISTS idx_sensor_data_event_type ON sensor_data(event_type);
+          CREATE INDEX IF NOT EXISTS idx_sensor_data_sensor_type ON sensor_data(sensor_type);
           GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO iotuser;
           GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO iotuser;
           GRANT ALL PRIVILEGES ON SCHEMA public TO iotuser;
@@ -93,7 +95,7 @@
       ansible.builtin.shell: >
         PGPASSWORD={{ postgres_password }} psql -h localhost -U {{ postgres_user }} -d {{ postgres_db }} -c "
         SELECT hypertable_name FROM timescaledb_information.hypertables WHERE hypertable_name = 'sensor_data';
-        SELECT indexname FROM pg_indexes WHERE tablename = 'sensor_data' AND indexname IN ('idx_sensor_data_device_id', 'idx_sensor_data_event_type');"
+        SELECT indexname FROM pg_indexes WHERE tablename = 'sensor_data' AND indexname IN ('idx_sensor_data_device_id', 'idx_sensor_data_event_type', 'idx_sensor_data_sensor_type');"
       register: verification
       failed_when: verification.rc != 0 or 'sensor_data' not in verification.stdout
       become: yes

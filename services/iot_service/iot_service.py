@@ -102,17 +102,22 @@ def store_sensor_data(data):
         if "switch" in db_data and db_data["switch"] is not None:
             db_data["switch"] = str(db_data["switch"])
 
+        # Handle sensor_type as text field
+        if "sensor_type" in db_data and db_data["sensor_type"] is not None:
+            db_data["sensor_type"] = str(db_data["sensor_type"])
+
         # Rename timestamp to time for database schema compatibility
         if "timestamp" in db_data:
             db_data["time"] = db_data.pop("timestamp")
 
         # Debug output to check field values
         logger.info(
-            f"Storing data with motion={db_data.get('motion')} switch={db_data.get('switch')} wifi_rssi={db_data.get('wifi_rssi')} fan_pwm={db_data.get('fan_pwm')}"
+            f"Storing data with motion={db_data.get('motion')} switch={db_data.get('switch')} wifi_rssi={db_data.get('wifi_rssi')} fan_pwm={db_data.get('fan_pwm')} sensor_type={db_data.get('sensor_type')}"
         )
 
         # Set default values for optional fields that might not be in the payload
         db_data.setdefault("temp_sensor_type", None)
+        db_data.setdefault("sensor_type", None)
 
         with db_conn.cursor() as cur:
             cur.execute(
@@ -120,12 +125,12 @@ def store_sensor_data(data):
                 INSERT INTO sensor_data (
                     time, device_id, event_type, temperature, humidity, 
                     pressure, temp_sensor_type, motion, switch, version, uptime,
-                    wifi_rssi, uptime_seconds, fan_pwm, fans_active_level
+                    wifi_rssi, uptime_seconds, fan_pwm, fans_active_level, sensor_type
                 )
                 VALUES (
                     %(time)s, %(device_id)s, %(event_type)s, %(temperature)s, %(humidity)s,
                     %(pressure)s, %(temp_sensor_type)s, %(motion)s, %(switch)s, %(version)s, %(uptime)s,
-                    %(wifi_rssi)s, %(uptime_seconds)s, %(fan_pwm)s, %(fans_active_level)s
+                    %(wifi_rssi)s, %(uptime_seconds)s, %(fan_pwm)s, %(fans_active_level)s, %(sensor_type)s
                 )
             """,
                 db_data,

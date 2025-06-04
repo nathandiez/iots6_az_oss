@@ -57,3 +57,31 @@ Thumbs.db
 *.bak
 
 hosts
+# Environment and secrets
+.env
+.env.local
+.env.*.local
+
+# Terraform state
+terraform.tfstate*
+.terraform/
+.terraform.lock.hcl
+
+# Ansible temporary files
+*.retry
+
+# Logs
+*.log
+logs/
+
+# Backup files
+*.bak
+*.backup
+
+# SSH keys (just in case)
+*.pem
+*.key
+
+# OS files
+.DS_Store
+Thumbs.db
