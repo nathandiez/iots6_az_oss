@@ -87,7 +87,7 @@ cp .env.example .env
 - TimescaleDB: [EXTERNAL_IP]:5432
 - Mosquitto MQTT: [EXTERNAL_IP]:1883
 - Grafana Dashboard: http://[EXTERNAL_IP]:3000 (admin/admin)
-- Check service IPs: kubectl get services -n iot-sensors
+- Check service IPs: kubectl get services -n your-namespace
 
 ## Project Structure
 
@@ -127,16 +127,16 @@ All services use persistent storage and are exposed via Azure LoadBalancers for 
 ### Basic Status Checks
 ```bash
 # Check all deployments and services
-kubectl get all -n iot-sensors
+kubectl get all -n your-namespace
 
 # Check pod status and readiness
-kubectl get pods -n iot-sensors
+kubectl get pods -n your-namespace
 
 # Check service external IPs
-kubectl get services -n iot-sensors
+kubectl get services -n your-namespace
 
 # Check persistent volume claims
-kubectl get pvc -n iot-sensors
+kubectl get pvc -n your-namespace
 
 # Overall cluster status
 ./status.sh
@@ -145,50 +145,50 @@ kubectl get pvc -n iot-sensors
 ### Service Logs and Debugging
 ```bash
 # View real-time logs for each service
-kubectl logs -f deployment/iot-service -n iot-sensors
-kubectl logs -f deployment/timescaledb -n iot-sensors
-kubectl logs -f deployment/mosquitto -n iot-sensors
-kubectl logs -f deployment/grafana -n iot-sensors
+kubectl logs -f deployment/iot-service -n your-namespace
+kubectl logs -f deployment/timescaledb -n your-namespace
+kubectl logs -f deployment/mosquitto -n your-namespace
+kubectl logs -f deployment/grafana -n your-namespace
 
 # Get recent logs (last 50 lines)
-kubectl logs deployment/[service-name] -n iot-sensors --tail=50
+kubectl logs deployment/[service-name] -n your-namespace --tail=50
 
 # Describe pod for detailed status and events
-kubectl describe pod -l app=[service-name] -n iot-sensors
+kubectl describe pod -l app=[service-name] -n your-namespace
 ```
 
 ### Database Management
 ```bash
 # Access TimescaleDB directly
-kubectl exec -it deployment/timescaledb -n iot-sensors -- psql -U iotuser -d iotdb
+kubectl exec -it deployment/timescaledb -n your-namespace -- psql -U iotuser -d iotdb
 
 # Check database connectivity
-kubectl exec deployment/timescaledb -n iot-sensors -- pg_isready -U iotuser -d iotdb
+kubectl exec deployment/timescaledb -n your-namespace -- pg_isready -U iotuser -d iotdb
 
 # View sensor data
-kubectl exec -it deployment/timescaledb -n iot-sensors -- psql -U iotuser -d iotdb -c "SELECT * FROM sensor_data LIMIT 10;"
+kubectl exec -it deployment/timescaledb -n your-namespace -- psql -U iotuser -d iotdb -c "SELECT * FROM sensor_data LIMIT 10;"
 ```
 
 ### Troubleshooting Commands
 ```bash
 # Check cluster events (useful for debugging failures)
-kubectl get events -n iot-sensors --sort-by=.metadata.creationTimestamp
+kubectl get events -n your-namespace --sort-by=.metadata.creationTimestamp
 
 # Check node resources
 kubectl top nodes
 
 # Check pod resource usage
-kubectl top pods -n iot-sensors
+kubectl top pods -n your-namespace
 
 # Test service connectivity
-kubectl exec -it deployment/iot-service -n iot-sensors -- ping timescaledb
-kubectl exec -it deployment/iot-service -n iot-sensors -- ping mosquitto
+kubectl exec -it deployment/iot-service -n your-namespace -- ping timescaledb
+kubectl exec -it deployment/iot-service -n your-namespace -- ping mosquitto
 
 # Force restart a problematic deployment
-kubectl rollout restart deployment/[service-name] -n iot-sensors
+kubectl rollout restart deployment/[service-name] -n your-namespace
 
 # Delete and recreate a deployment
-kubectl delete deployment [service-name] -n iot-sensors
+kubectl delete deployment [service-name] -n your-namespace
 envsubst < kubernetes/deployments/[service-name].yaml | kubectl apply -f -
 ```
 
@@ -211,8 +211,8 @@ echo $TIMESCALEDB_STORAGE_SIZE
 ## Troubleshooting
 
 - **Deployment fails**: Check `az login` status and subscription permissions
-- **Services not accessible**: Verify LoadBalancer IPs with `kubectl get services -n iot-sensors`
-- **Pod errors**: Check logs with `kubectl logs -f deployment/[service-name] -n iot-sensors`
+- **Services not accessible**: Verify LoadBalancer IPs with `kubectl get services -n your-namespace`
+- **Pod errors**: Check logs with `kubectl logs -f deployment/[service-name] -n your-namespace`
 
 ## Security Notes
 
