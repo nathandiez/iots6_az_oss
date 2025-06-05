@@ -12,18 +12,26 @@ override.tf.json
 .terraformrc
 terraform.rc
 
+# Kubernetes
+kubeconfig
+**/kubeconfig
+
 # Ansible
 *.retry
 .ansible/
+hosts
 
 # Environment & Secrets
-set-azure-env.sh
 .env
 .env.local
+.env.*.local
+set-azure-env.sh
+
+# SSH Keys & Certificates
 *.pem
 *.key
-id_rsa*
 *.crt
+id_rsa*
 
 # Python
 __pycache__/
@@ -36,9 +44,11 @@ __pycache__/
 venv/
 env/
 
-# Logs
+# Logs & Backups
 *.log
 logs/
+*.backup
+*.bak
 
 # OS & Editor
 .DS_Store
@@ -51,37 +61,3 @@ Thumbs.db
 
 # Vagrant
 .vagrant/
-
-# Backup files
-*.backup
-*.bak
-
-hosts
-# Environment and secrets
-.env
-.env.local
-.env.*.local
-
-# Terraform state
-terraform.tfstate*
-.terraform/
-.terraform.lock.hcl
-
-# Ansible temporary files
-*.retry
-
-# Logs
-*.log
-logs/
-
-# Backup files
-*.bak
-*.backup
-
-# SSH keys (just in case)
-*.pem
-*.key
-
-# OS files
-.DS_Store
-Thumbs.db
