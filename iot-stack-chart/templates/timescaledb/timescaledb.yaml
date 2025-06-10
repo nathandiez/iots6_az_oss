@@ -1,0 +1,107 @@
+{{- if .Values.timescaledb.enabled }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: timescaledb-pvc
+  namespace: {{ .Values.global.namespace }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: {{ .Values.timescaledb.persistence.storageClass }}
+  resources:
+    requests:
+      storage: {{ .Values.timescaledb.persistence.size }}
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: timescaledb
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app: timescaledb
+    chart: {{ include "iot-stack-chart.chart" . }}
+    release: {{ .Release.Name }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate  # Ensures old pod is terminated before new one starts
+  selector:
+    matchLabels:
+      app: timescaledb
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: timescaledb
+        release: {{ .Release.Name }}
+    spec:
+      securityContext:
+        fsGroup: 999  # Postgres user group
+        runAsUser: 999  # Postgres user ID
+      initContainers:
+      - name: postgres-permissions
+        image: busybox:1.35
+        command: ['sh', '-c']
+        args:
+          - |
+            rm -rf /var/lib/postgresql/data/lost+found
+            chown -R 999:999 /var/lib/postgresql/data
+            chmod -R 700 /var/lib/postgresql/data
+        volumeMounts:
+        - name: timescaledb-storage
+          mountPath: /var/lib/postgresql/data
+        securityContext:
+          runAsUser: 0  # Run as root to fix permissions
+      containers:
+      - name: timescaledb
+        image: "{{ .Values.timescaledb.image.repository }}:{{ .Values.timescaledb.image.tag }}"
+        imagePullPolicy: {{ .Values.timescaledb.image.pullPolicy }}
+        ports:
+        - containerPort: {{ .Values.timescaledb.service.port }}
+        envFrom:
+        - secretRef:
+            name: iot-secrets
+        env:
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
+        volumeMounts:
+        - name: timescaledb-storage
+          mountPath: /var/lib/postgresql/data
+        resources:
+          {{- toYaml .Values.timescaledb.resources | nindent 10 }}
+        readinessProbe:
+          exec:
+            command:
+              - /bin/sh
+              - -c
+              - 'pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
+          initialDelaySeconds: 30
+          periodSeconds: 10
+      volumes:
+      - name: timescaledb-storage
+        persistentVolumeClaim:
+          claimName: timescaledb-pvc
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: timescaledb-service
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app: timescaledb
+    chart: {{ include "iot-stack-chart.chart" . }}
+    release: {{ .Release.Name }}
+spec:
+  type: {{ .Values.timescaledb.service.type }}
+  ports:
+  - port: {{ .Values.timescaledb.service.port }}
+    targetPort: {{ .Values.timescaledb.service.port }}
+    protocol: TCP
+    name: postgres
+  selector:
+    app: timescaledb
+    release: {{ .Release.Name }}
+{{- end }}

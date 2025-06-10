@@ -1,0 +1,8 @@
+.DS_Store
+.git/
+.env
+.env.*
+*.tfstate
+*.tfstate.backup
+.terraform/
+terraform.tfvars

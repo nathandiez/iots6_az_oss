@@ -1,0 +1,27 @@
+global:
+  projectName: iots6
+  keyVaultName: kv-iots6
+  tenantId: ""  # Will be set during deployment
+  environments:
+    - dev
+    - staging
+    - prod
+
+clusterSecretStore:
+  name: azure-key-vault
+  
+externalSecrets:
+  refreshInterval: 1h
+  secretName: iot-secrets
+  
+secrets:
+  - secretKey: POSTGRES_DB
+    keyVaultKey: postgres-db
+  - secretKey: POSTGRES_USER
+    keyVaultKey: postgres-user
+  - secretKey: POSTGRES_PASSWORD
+    keyVaultKey: postgres-password
+  - secretKey: GRAFANA_ADMIN_USER
+    keyVaultKey: grafana-admin-user
+  - secretKey: GRAFANA_ADMIN_PASSWORD
+    keyVaultKey: grafana-admin-password

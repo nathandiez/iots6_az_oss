@@ -1,63 +1,80 @@
-# Terraform
+# Terraform state and sensitive files
+terraform.tfstate*
 .terraform/
 .terraform.lock.hcl
-*.tfstate
-*.tfstate.*
 *.tfvars
-terraform.tfvars*
-override.tf
-override.tf.json
-*_override.tf
-*_override.tf.json
-.terraformrc
-terraform.rc
+*.auto.tfvars
 
-# Kubernetes
-kubeconfig
-**/kubeconfig
-
-# Ansible
-*.retry
-.ansible/
-hosts
-
-# Environment & Secrets
+# Environment and secrets
 .env
 .env.local
 .env.*.local
-set-azure-env.sh
+secrets/
 
-# SSH Keys & Certificates
+# SSH keys (safety net)
 *.pem
 *.key
-*.crt
 id_rsa*
+*.pub
 
-# Python
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-.Python
-*.so
-.venv/
-venv/
-env/
+# Kubernetes config (safety net)
+kubeconfig*
+*.kubeconfig
+.kube/
 
-# Logs & Backups
+# Ansible temporary files
+*.retry
+ansible.log
+
+# ArgoCD/Helm secrets (if any)
+values-secrets.yaml
+*-secrets.yaml
+
+# Logs and temporary files
 *.log
 logs/
-*.backup
-*.bak
+tmp/
 
-# OS & Editor
+# Backup files
+*.bak
+*.backup
+*~
+
+# OS files
 .DS_Store
 Thumbs.db
+._*
+
+# Azure credentials (safety net)
+.azure/
+credentials
+config
+
+# Database dumps and data
+*.sql
+*.dump
+data/
+
+# IDE and editor files
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
 
-# Vagrant
-.vagrant/
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Node modules (if any)
+node_modules/
+
+# Local development
+local/
+development/
+
+# Temporary scripts or notes
+scratch/
+notes/
+TODO.md
