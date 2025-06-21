@@ -87,26 +87,81 @@ safe_run() {
     fi
 }
 
-# Function to wait for resource deletion
+# FIXED: Improved wait function with better exit conditions
 wait_for_deletion() {
     local resource_type="$1"
     local resource_name="$2"
     local timeout="${3:-300}"
     local count=0
+    local check_interval=10
     
     echo "⏳ Waiting for $resource_type '$resource_name' to be deleted..."
+    
     while [[ $count -lt $timeout ]]; do
-        if ! az "$resource_type" show --name "$resource_name" --resource-group "$RESOURCE_GROUP" >/dev/null 2>&1; then
-            echo "✅ $resource_type '$resource_name' successfully deleted"
-            return 0
+        # Check if resource still exists
+        if [[ "$resource_type" == "group" ]]; then
+            # For resource groups, use specific check
+            if ! az group show --name "$resource_name" >/dev/null 2>&1; then
+                echo "✅ Resource group '$resource_name' successfully deleted"
+                return 0
+            fi
+        else
+            # For other resources
+            if ! az "$resource_type" show --name "$resource_name" --resource-group "$RESOURCE_GROUP" >/dev/null 2>&1; then
+                echo "✅ $resource_type '$resource_name' successfully deleted"
+                return 0
+            fi
         fi
-        sleep 5
-        count=$((count + 5))
+        
+        sleep $check_interval
+        count=$((count + check_interval))
+        
+        # Progress updates every 30 seconds
         if [[ $((count % 30)) -eq 0 ]]; then
             echo "   Still waiting for $resource_type deletion... (${count}s elapsed)"
         fi
+        
+        # CRITICAL FIX: After 5 minutes, do a final check and exit
+        if [[ $count -ge 300 ]]; then
+            echo "⚠️  Timeout reached (${count}s). Doing final verification..."
+            
+            # Final verification
+            if [[ "$resource_type" == "group" ]]; then
+                if ! az group show --name "$resource_name" >/dev/null 2>&1; then
+                    echo "✅ Resource group '$resource_name' is actually deleted (Azure reporting delay)"
+                    return 0
+                else
+                    echo "⚠️  Resource group '$resource_name' still exists after timeout"
+                    echo "   You may need to check Azure Portal and manually delete if stuck"
+                    return 1
+                fi
+            else
+                if ! az "$resource_type" show --name "$resource_name" --resource-group "$RESOURCE_GROUP" >/dev/null 2>&1; then
+                    echo "✅ $resource_type '$resource_name' is actually deleted (Azure reporting delay)"
+                    return 0
+                else
+                    echo "⚠️  $resource_type '$resource_name' still exists after timeout"
+                    return 1
+                fi
+            fi
+        fi
     done
-    echo "⚠️  Timeout waiting for $resource_type deletion, continuing..."
+    
+    # Should never reach here, but just in case
+    echo "⚠️  Unexpected timeout condition, continuing..."
+    return 1
+}
+
+# FIXED: Quick resource existence check function
+resource_exists() {
+    local resource_type="$1"
+    local resource_name="$2"
+    
+    if [[ "$resource_type" == "group" ]]; then
+        az group show --name "$resource_name" >/dev/null 2>&1
+    else
+        az "$resource_type" show --name "$resource_name" --resource-group "$RESOURCE_GROUP" >/dev/null 2>&1
+    fi
 }
 
 # Phase 1: Kubernetes Resources Cleanup
@@ -389,7 +444,7 @@ if [[ -n "$DISKS" ]]; then
     done
 fi
 
-# Wait for AKS deletion to complete
+# FIXED: Wait for AKS deletion but with timeout
 if [[ -n "$REMAINING_CLUSTERS" ]]; then
     echo "$REMAINING_CLUSTERS" | while read -r cluster; do
         if [[ -n "$cluster" ]]; then
@@ -414,7 +469,7 @@ if [[ -n "$NODE_RESOURCE_GROUPS" ]]; then
         fi
     done
     
-    # Wait for node resource groups to be deleted
+    # FIXED: Wait for node resource groups but with timeout
     echo "$NODE_RESOURCE_GROUPS" | while read -r rg; do
         if [[ -n "$rg" ]]; then
             wait_for_deletion "group" "$rg" 600
@@ -429,15 +484,15 @@ echo ""
 echo "🗑️  PHASE 7: Delete Main Resource Group"
 echo "=========================================="
 
-if az group show --name "$RESOURCE_GROUP" >/dev/null 2>&1; then
+if resource_exists "group" "$RESOURCE_GROUP"; then
     echo "🔄 Deleting main resource group: $RESOURCE_GROUP"
     echo "   This will delete ALL remaining resources in the group..."
     
     # Force delete the resource group
     safe_run "az group delete --name '$RESOURCE_GROUP' --yes --force-deletion-types Microsoft.Compute/virtualMachines,Microsoft.Compute/virtualMachineScaleSets" "Delete resource group: $RESOURCE_GROUP"
     
-    # Wait for main resource group deletion
-    wait_for_deletion "group" "$RESOURCE_GROUP" 900
+    # FIXED: Wait for main resource group deletion with proper timeout
+    wait_for_deletion "group" "$RESOURCE_GROUP" 600
 else
     echo "⚠️  Resource group $RESOURCE_GROUP not found or already deleted"
 fi
@@ -474,6 +529,29 @@ fi
 # Clean up any temporary files
 rm -f kubeconfig-*
 rm -f *.tmp
+
+# FINAL VERIFICATION
+echo ""
+echo "🔍 FINAL VERIFICATION"
+echo "=========================================="
+
+echo "🔄 Verifying all resources are deleted..."
+
+# Check resource group
+if resource_exists "group" "$RESOURCE_GROUP"; then
+    echo "⚠️  WARNING: Resource group $RESOURCE_GROUP still exists"
+    echo "   Check Azure Portal for any remaining resources"
+else
+    echo "✅ Resource group $RESOURCE_GROUP is deleted"
+fi
+
+# Check for any remaining AKS clusters
+REMAINING_AKS=$(az aks list --query "[?name=='$CLUSTER_NAME']" -o tsv 2>/dev/null || echo "")
+if [[ -n "$REMAINING_AKS" ]]; then
+    echo "⚠️  WARNING: AKS cluster $CLUSTER_NAME still exists"
+else
+    echo "✅ AKS cluster $CLUSTER_NAME is deleted"
+fi
 
 echo ""
 echo "=========================================="
